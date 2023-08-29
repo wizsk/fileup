@@ -12,36 +12,46 @@ const ws = new WebSocket(`ws://${host}:${port}/ws`); // Establish WebSocket conn
 
 ws.onmessage = async (ev) => {
     const msg = await JSON.parse(ev.data);
+
     if (msg.is_error) {
-        console.error(msg.body)
-        return
+        progres.style.color = "red";
     }
 
     console.log(msg.body)
+    progres.innerText = msg.body
 }
 
 
 fileInput.addEventListener('change', async () => {
-    console.log(fileInput)
+    // for (let i = 0; i< fileInput.files.lenth; )
     const file = fileInput.files[0];
 
     const reader = new FileReader();
 
     reader.onload = async (event) => {
         const chunkCount = event.target.result.byteLength / CHUNK_SIZE;
-        console.log(file)
+
+        // sending file name
         ws.send(file.name)
 
         for (let chunkId = 0; chunkId <= chunkCount; chunkId++) {
             const data = event.target.result.slice(chunkId * CHUNK_SIZE, chunkId * CHUNK_SIZE + CHUNK_SIZE);
             progres.innerText = `${chunkId}`;
             ws.send(data);
+            progres.innerText = `${chunkId * 100 / chunkCount}`
+            await sleep(10)
         }
+        progres.innerText = "ceheking file validity"
         ws.send(await calculateSHA256Checksum(file))
     };
 
     reader.readAsArrayBuffer(file);
 });
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 
 // async function calculateFileChecksum() {
 //     const file = fileInput.files[0];

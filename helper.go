@@ -7,12 +7,28 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
+	"strconv"
+	"time"
 )
 
 var (
 	ErrorSHA256DontMatch = errors.New("sha256 dosen't match")
 )
+
+func (up Upper) createFile(name string) (*os.File, error) {
+	name = filepath.Join(up.RootDir, name)
+
+	_, err := os.Stat(name)
+	// err == nil mans the file exists
+	if err == nil {
+		// for randomness
+		name += "-" + strconv.Itoa(int(time.Now().UnixNano()))
+	}
+
+	return os.Create(name)
+}
 
 func checkFile(fileName string, expectedSum []byte) (Message, error) {
 	file, err := os.Open(fileName)
@@ -59,7 +75,7 @@ func calculateSHA256Checksum(data io.Reader) (string, error) {
 }
 
 // for debuggin perposes
-func printMemUsage(r string) {
+func PrintMemUsage(r string) {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 	fmt.Printf("Alloc = %v MiB", m.Alloc/1024/1024)

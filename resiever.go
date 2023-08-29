@@ -3,8 +3,6 @@ package fileup
 import (
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 
 	"github.com/gorilla/websocket"
 )
@@ -13,14 +11,10 @@ const (
 	BUFF_SIZE = 2 * 1024 * 1024 // 2MB
 )
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  BUFF_SIZE,
-	WriteBufferSize: BUFF_SIZE,
-}
-
 type Upper struct {
 	RootDir  string
 	BuffSize uint
+	wsUp     websocket.Upgrader
 }
 
 type Message struct {
@@ -32,11 +26,15 @@ func NewUpper(root string) Upper {
 	return Upper{
 		RootDir:  root,
 		BuffSize: BUFF_SIZE,
+		wsUp: websocket.Upgrader{
+			ReadBufferSize:  BUFF_SIZE,
+			WriteBufferSize: BUFF_SIZE,
+		},
 	}
 }
 
-func (up Upper) handleWebSocket(w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
+func (up Upper) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+	conn, err := up.wsUp.Upgrade(w, r, nil)
 	if err != nil {
 		return
 	}
@@ -44,21 +42,23 @@ func (up Upper) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	msg, name, err := conn.ReadMessage()
 	if err != nil || msg != websocket.TextMessage {
+		log.Println(err)
 		return
 	}
 
-	f, err := os.Create(filepath.Join(up.RootDir, string(name)))
+	f, err := up.createFile(string(name))
 	if err != nil {
 		log.Println(err)
 		return
 	}
 	defer f.Close()
 
-	buff := make([]byte, BUFF_SIZE)
+	buff := make([]byte, up.BuffSize)
 
 	for {
 		msg, buff, err = conn.ReadMessage()
 		if err != nil {
+			log.Println(err)
 			return
 		}
 
@@ -77,11 +77,13 @@ func (up Upper) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	fileMsg, err := checkFile(f.Name(), buff)
 	if err != nil {
+		log.Println(err)
 		// handle err
 	}
 
 	conn.WriteJSON(fileMsg)
 	if err != nil {
+		log.Println(err)
 		// handle err
 		return
 	}
