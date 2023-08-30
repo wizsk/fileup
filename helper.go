@@ -27,7 +27,7 @@ func createFile(up *Upper) error {
 	var filename struct {
 		FileName string `json:"file_name"`
 	}
-	err := json.Unmarshal(up.Buff, &filename)
+	err := json.Unmarshal(up.Data, &filename)
 	if err != nil {
 		return err
 	}
@@ -54,7 +54,7 @@ func (up *Upper) checkFile() (Message, error) {
 		ShaSum string `json:"checksum"`
 	}
 
-	err := json.Unmarshal(up.Buff, &expectedSum)
+	err := json.Unmarshal(up.Data, &expectedSum)
 	if err != nil {
 		return Message{IsError: true, Body: "something unexpected happened"}, err
 	}

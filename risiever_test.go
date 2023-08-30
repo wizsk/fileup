@@ -3,6 +3,7 @@ package fileup
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"testing"
 
@@ -43,7 +44,8 @@ func (mc *mockConn) ReadMessage() (int, []byte, error) {
 
 	return 0, nil, io.EOF
 }
-func (mc *mockConn) WriteJSON(interface{}) error {
+func (mc *mockConn) WriteJSON(v interface{}) error {
+	fmt.Println(v)
 	return nil
 }
 
@@ -74,7 +76,6 @@ func (mf *mockFile) Close() error {
 func mockUpper(mf *mockFile) Upper {
 	return Upper{
 		RootDir:  "", // this wont be needed for testing
-		Buff:     make([]byte, BUFF_SIZE),
 		BuffSize: BUFF_SIZE,
 		wsUp: websocket.Upgrader{
 			ReadBufferSize:  BUFF_SIZE,
@@ -93,7 +94,7 @@ func mockUpper(mf *mockFile) Upper {
 
 func newMockConn() *mockConn {
 	data := "some random data here it's just text file"
-	sha := "76cf9c0e4eacef622ddc73c583be62db9472500c65bf31d890cbff35a675b69a" // sha of the text
+	sha := `{"checksum": "76cf9c0e4eacef622ddc73c583be62db9472500c65bf31d890cbff35a675b69a"}` // sha of the text
 	mcon := []mockConnRes{
 		{
 			msg:  websocket.TextMessage,

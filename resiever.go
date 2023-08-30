@@ -123,7 +123,10 @@ func (up *Upper) getData(conn ConnReader) error {
 
 		// checing file intrigrity
 		// fmt.Println("checksum", string(up.Buff))
-		fileMsg, _ := up.checkFile()
+		fileMsg, err := up.checkFile()
+		if err != nil {
+			return err
+		}
 		conn.WriteJSON(fileMsg)
 		if err != nil {
 			// TODO:
@@ -135,5 +138,8 @@ func (up *Upper) getData(conn ConnReader) error {
 		up.CurrentFile.Close()
 		up.CurrentFile = nil
 		up.CurrentFileName = ""
+		if err != nil {
+			return err
+		}
 	}
 }
