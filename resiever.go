@@ -2,8 +2,8 @@ package fileup
 
 import (
 	"errors"
+	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 
@@ -66,10 +66,8 @@ func (up *Upper) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	up.getData(conn)
 }
-func (up *Upper) getData(conn ConnReader) error {
-	var msg int
-	var err error
 
+func (up *Upper) getData(conn ConnReader) error {
 	// just incase of there is a pannic
 	// or early return
 	defer func() {
@@ -78,11 +76,14 @@ func (up *Upper) getData(conn ConnReader) error {
 		}
 	}()
 
+	var msg int
+	var err error
+
 	for {
 		// read the name
 		msg, up.Buff, err = conn.ReadMessage()
 		if err != nil {
-			return err
+			return fmt.Errorf("while reading conn: %v", err)
 		}
 		if msg != websocket.TextMessage {
 			return ErrWrongMSG
@@ -90,7 +91,7 @@ func (up *Upper) getData(conn ConnReader) error {
 
 		err = up.createFile(up)
 		if err != nil {
-			log.Println(err)
+			return fmt.Errorf("while creaing file: %v", err)
 		}
 
 		// while the message type is Binnary read the data and save it to the
@@ -98,7 +99,7 @@ func (up *Upper) getData(conn ConnReader) error {
 		for {
 			msg, up.Buff, err = conn.ReadMessage()
 			if err != nil {
-				return err
+				return fmt.Errorf("while reading conn: %v", err)
 			}
 
 			// if msg type no textMessage then it's binnary object
@@ -108,22 +109,22 @@ func (up *Upper) getData(conn ConnReader) error {
 
 			_, err = up.CurrentFile.Write(up.Buff)
 			if err != nil {
-				return err
+				return fmt.Errorf("while writing data to file: %v", err)
 			}
 
 		}
 
 		// checing file intrigrity
 		// fmt.Println("checksum", string(up.Buff))
-		fileMsg, err := up.checkFile()
-		if err != nil {
-			// handle err
-			log.Println(err)
-		}
-
+		fileMsg, _ := up.checkFile()
 		conn.WriteJSON(fileMsg)
 		if err != nil {
 			return err
 		}
+
+		// cleanin up
+		up.CurrentFile.Close()
+		up.CurrentFile = nil
+		up.CurrentFileName = ""
 	}
 }
