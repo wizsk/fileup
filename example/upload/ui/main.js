@@ -3,6 +3,7 @@ const fileInput = document.getElementById('fileInput');
 const progres = document.getElementById("pro")
 
 
+
 // Get the host and port from the current URL
 const host = window.location.hostname;
 const port = window.location.port || (window.location.protocol === 'https:' ? 443 : 80);
@@ -24,45 +25,42 @@ ws.onmessage = async (ev) => {
 
 fileInput.addEventListener('change', async () => {
     // for (let i = 0; i< fileInput.files.lenth; )
-    const file = fileInput.files[0];
+    for (let i = 0; i < fileInput.files.length; i++) {
+        const file = fileInput.files[i];
+        console.log("file", file.name)
 
-    const reader = new FileReader();
+        const reader = new FileReader();
 
-    reader.onload = async (event) => {
-        const chunkCount = event.target.result.byteLength / CHUNK_SIZE;
+        reader.onload = async (event) => {
+            const chunkCount = event.target.result.byteLength / CHUNK_SIZE;
 
-        // sending file name
-        ws.send(file.name)
+            // sending file name
+            ws.send(JSON.stringify({ file_name: file.name }))
 
-        for (let chunkId = 0; chunkId <= chunkCount; chunkId++) {
-            const data = event.target.result.slice(chunkId * CHUNK_SIZE, chunkId * CHUNK_SIZE + CHUNK_SIZE);
-            progres.innerText = `${chunkId}`;
-            ws.send(data);
-            progres.innerText = `${chunkId * 100 / chunkCount}`
-            await sleep(10)
-        }
-        progres.innerText = "ceheking file validity"
-        ws.send(await calculateSHA256Checksum(file))
-    };
+            const b = new ArrayBuffer(8)
+            ws.send(b)
 
-    reader.readAsArrayBuffer(file);
+            // for (let chunkId = 0; chunkId <= chunkCount; chunkId++) {
+            //     const data = event.target.result.slice(chunkId * CHUNK_SIZE, chunkId * CHUNK_SIZE + CHUNK_SIZE);
+            //     progres.innerText = `${chunkId}`;
+            //     ws.send(data);
+            //     progres.innerText = `${Math.round(chunkId * 100 / chunkCount)}`
+            //     await sleep(10)
+            // }
+
+            // progres.innerText = "ceheking file validity"
+            // ws.send(JSON.stringify({ checksum: await calculateSHA256Checksum(file) }));
+            ws.send(JSON.stringify({ checksum: "foo" }));
+        };
+
+        reader.readAsArrayBuffer(file);
+    }
 });
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-
-// async function calculateFileChecksum() {
-//     const file = fileInput.files[0];
-
-//     if (file) {
-//         const checksum = await calculateSHA256Checksum(file);
-//         // document.getElementById("checksumResult").textContent = "Checksum: " + checksum;
-//     } else {
-//         // document.getElementById("checksumResult").textContent = "Please select a file.";
-//     }
-// }
 
 async function calculateSHA256Checksum(file) {
     const buffer = await file.arrayBuffer();

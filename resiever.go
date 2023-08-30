@@ -1,20 +1,38 @@
 package fileup
 
 import (
+	"errors"
+	"io"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/gorilla/websocket"
 )
+
+// for ease of testing
+type ConnReader interface {
+	ReadMessage() (int, []byte, error)
+	WriteJSON(interface{}) error
+}
 
 const (
 	BUFF_SIZE = 2 * 1024 * 1024 // 2MB
 )
 
+var (
+	ErrWrongMSG = errors.New("wrong message")
+)
+
 type Upper struct {
-	RootDir  string
-	BuffSize uint
-	wsUp     websocket.Upgrader
+	RootDir         string
+	BuffSize        uint
+	Buff            []byte
+	CurrentFile     io.WriteCloser
+	CurrentFileName string
+	wsUp            websocket.Upgrader
+	createFile      func(*Upper) error
+	openFile        func(name string) (io.ReadCloser, error)
 }
 
 type Message struct {
@@ -25,66 +43,87 @@ type Message struct {
 func NewUpper(root string) Upper {
 	return Upper{
 		RootDir:  root,
+		Buff:     make([]byte, BUFF_SIZE),
 		BuffSize: BUFF_SIZE,
 		wsUp: websocket.Upgrader{
 			ReadBufferSize:  BUFF_SIZE,
 			WriteBufferSize: BUFF_SIZE,
 		},
+		createFile: createFile,
+		openFile: func(name string) (io.ReadCloser, error) {
+			return os.Open(name)
+		},
 	}
 }
 
-func (up Upper) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+func (up *Upper) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := up.wsUp.Upgrade(w, r, nil)
 	if err != nil {
+		// handle er
 		return
 	}
 	defer conn.Close()
 
-	msg, name, err := conn.ReadMessage()
-	if err != nil || msg != websocket.TextMessage {
-		log.Println(err)
-		return
-	}
+	up.getData(conn)
+}
+func (up *Upper) getData(conn ConnReader) error {
+	var msg int
+	var err error
 
-	f, err := up.createFile(string(name))
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	defer f.Close()
-
-	buff := make([]byte, up.BuffSize)
+	// just incase of there is a pannic
+	// or early return
+	defer func() {
+		if up.CurrentFile != nil {
+			_ = up.CurrentFile.Close()
+		}
+	}()
 
 	for {
-		msg, buff, err = conn.ReadMessage()
+		// read the name
+		msg, up.Buff, err = conn.ReadMessage()
+		if err != nil {
+			return err
+		}
+		if msg != websocket.TextMessage {
+			return ErrWrongMSG
+		}
+
+		err = up.createFile(up)
 		if err != nil {
 			log.Println(err)
-			return
 		}
 
-		// if msg type no textMessage then it's binnary object;;
-		// but i do think if text file is sent then it will be a pain :)
-		// i guess noo
-		if msg != websocket.BinaryMessage {
-			break
+		// while the message type is Binnary read the data and save it to the
+		// file else break and do post processing
+		for {
+			msg, up.Buff, err = conn.ReadMessage()
+			if err != nil {
+				return err
+			}
+
+			// if msg type no textMessage then it's binnary object
+			if msg != websocket.BinaryMessage {
+				break
+			}
+
+			_, err = up.CurrentFile.Write(up.Buff)
+			if err != nil {
+				return err
+			}
+
 		}
-		_, err = f.Write(buff)
+
+		// checing file intrigrity
+		// fmt.Println("checksum", string(up.Buff))
+		fileMsg, err := up.checkFile()
 		if err != nil {
+			// handle err
 			log.Println(err)
-			return
 		}
-	}
 
-	fileMsg, err := checkFile(f.Name(), buff)
-	if err != nil {
-		log.Println(err)
-		// handle err
-	}
-
-	conn.WriteJSON(fileMsg)
-	if err != nil {
-		log.Println(err)
-		// handle err
-		return
+		conn.WriteJSON(fileMsg)
+		if err != nil {
+			return err
+		}
 	}
 }

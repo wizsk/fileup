@@ -3,6 +3,7 @@ package fileup
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,21 +18,49 @@ var (
 	ErrorSHA256DontMatch = errors.New("sha256 dosen't match")
 )
 
-func (up Upper) createFile(name string) (*os.File, error) {
+// createFile takes the *Upper and reads the data
+// figures out the file name and creates the file
+// and saves it to the *Upper
+//
+// if error happends it retusn it
+func createFile(up *Upper) error {
+	var filename struct {
+		FileName string `json:"file_name"`
+	}
+	err := json.Unmarshal(up.Buff, &filename)
+	if err != nil {
+		return err
+	}
+
+	name := filename.FileName
 	name = filepath.Join(up.RootDir, name)
 
-	_, err := os.Stat(name)
+	_, err = os.Stat(name)
 	// err == nil mans the file exists
 	if err == nil {
 		// for randomness
+		// TODO:
+		// 		- Find a better solution
 		name += "-" + strconv.Itoa(int(time.Now().UnixNano()))
 	}
 
-	return os.Create(name)
+	up.CurrentFile, err = os.Create(name)
+	up.CurrentFileName = name
+	return err
 }
 
-func checkFile(fileName string, expectedSum []byte) (Message, error) {
-	file, err := os.Open(fileName)
+func (up *Upper) checkFile() (Message, error) {
+	var expectedSum struct {
+		ShaSum string `json:"checksum"`
+	}
+
+	err := json.Unmarshal(up.Buff, &expectedSum)
+	if err != nil {
+		return Message{IsError: true, Body: "something unexpected happened"}, err
+	}
+
+	var file io.ReadCloser
+	file, err = up.openFile(up.CurrentFileName)
 	if err != nil {
 		msg := Message{
 			IsError: true,
@@ -49,7 +78,7 @@ func checkFile(fileName string, expectedSum []byte) (Message, error) {
 		return msg, err
 	}
 
-	if sum != string(expectedSum) {
+	if sum != string(expectedSum.ShaSum) {
 		msg := Message{
 			IsError: true,
 			Body:    ErrorSHA256DontMatch.Error(),
