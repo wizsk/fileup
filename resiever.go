@@ -2,7 +2,6 @@ package fileup
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -25,9 +24,14 @@ var (
 )
 
 type Upper struct {
-	RootDir         string
-	BuffSize        uint
-	Buff            []byte
+	RootDir  string
+	BuffSize uint
+	// Data is for storing msg data
+	// problem is it will alloate and alocate a lot!
+	// TODO:
+	//		- Fix this || !
+	//				   or not
+	Data            []byte
 	CurrentFile     io.WriteCloser
 	CurrentFileName string
 	wsUp            websocket.Upgrader
@@ -43,7 +47,6 @@ type Message struct {
 func NewUpper(root string) Upper {
 	return Upper{
 		RootDir:  root,
-		Buff:     make([]byte, BUFF_SIZE),
 		BuffSize: BUFF_SIZE,
 		wsUp: websocket.Upgrader{
 			ReadBufferSize:  BUFF_SIZE,
@@ -81,9 +84,10 @@ func (up *Upper) getData(conn ConnReader) error {
 
 	for {
 		// read the name
-		msg, up.Buff, err = conn.ReadMessage()
+		msg, up.Data, err = conn.ReadMessage()
 		if err != nil {
-			return fmt.Errorf("while reading conn: %v", err)
+			// return fmt.Errorf("while reading conn: %v", err)
+			return err
 		}
 		if msg != websocket.TextMessage {
 			return ErrWrongMSG
@@ -91,15 +95,17 @@ func (up *Upper) getData(conn ConnReader) error {
 
 		err = up.createFile(up)
 		if err != nil {
-			return fmt.Errorf("while creaing file: %v", err)
+			// return fmt.Errorf("while creaing file: %v", err)
+			return err
 		}
 
-		// while the message type is Binnary read the data and save it to the
+		// while the message type is Binnary read the up.Data and save it to the
 		// file else break and do post processing
 		for {
-			msg, up.Buff, err = conn.ReadMessage()
+			msg, up.Data, err = conn.ReadMessage()
 			if err != nil {
-				return fmt.Errorf("while reading conn: %v", err)
+				// return fmt.Errorf("while reading conn: %v", err)
+				return err
 			}
 
 			// if msg type no textMessage then it's binnary object
@@ -107,9 +113,10 @@ func (up *Upper) getData(conn ConnReader) error {
 				break
 			}
 
-			_, err = up.CurrentFile.Write(up.Buff)
+			_, err = up.CurrentFile.Write(up.Data)
 			if err != nil {
-				return fmt.Errorf("while writing data to file: %v", err)
+				// return fmt.Errorf("while writing up.Data to file: %v", err)
+				return err
 			}
 
 		}
@@ -119,6 +126,8 @@ func (up *Upper) getData(conn ConnReader) error {
 		fileMsg, _ := up.checkFile()
 		conn.WriteJSON(fileMsg)
 		if err != nil {
+			// TODO:
+			//		- delete the file
 			return err
 		}
 

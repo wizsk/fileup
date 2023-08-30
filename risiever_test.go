@@ -2,11 +2,24 @@ package fileup
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"testing"
 
 	"github.com/gorilla/websocket"
 )
+
+func TestGetData(t *testing.T) {
+	mf := &mockFile{}
+	up := mockUpper(mf)
+	mc := newMockConn()
+	err := up.getData(mc)
+	if err != nil && !errors.Is(err, io.EOF) {
+		t.Errorf("expected EOF err; got %v", err)
+		t.FailNow()
+	}
+	t.Log(mf.buff.String())
+}
 
 type mockConn struct {
 	reqCount, toalRes int
@@ -28,10 +41,18 @@ func (mc *mockConn) ReadMessage() (int, []byte, error) {
 		return r.msg, r.data, r.err
 	}
 
-	return 0, nil, nil
+	return 0, nil, io.EOF
 }
 func (mc *mockConn) WriteJSON(interface{}) error {
 	return nil
+}
+
+func (mc *mockConn) current() mockConnRes {
+	if mc.reqCount < mc.toalRes {
+		r := mc.results[mc.reqCount]
+		return r
+	}
+	return mockConnRes{}
 }
 
 type mockFile struct {
@@ -50,17 +71,7 @@ func (mf *mockFile) Close() error {
 	return nil
 }
 
-func TestGetData(t *testing.T) {
-	up := mockUpper()
-	mc := newMockConn()
-	err := up.getData(mc)
-	if err != nil {
-		t.Errorf("expected no err; got %v", err)
-		t.FailNow()
-	}
-}
-
-func mockUpper() Upper {
+func mockUpper(mf *mockFile) Upper {
 	return Upper{
 		RootDir:  "", // this wont be needed for testing
 		Buff:     make([]byte, BUFF_SIZE),
@@ -70,12 +81,12 @@ func mockUpper() Upper {
 			WriteBufferSize: BUFF_SIZE,
 		},
 		createFile: func(u *Upper) error {
-			u.CurrentFile = &mockFile{}
+			u.CurrentFile = mf
 			u.CurrentFileName = "test"
 			return nil
 		},
 		openFile: func(name string) (io.ReadCloser, error) {
-			return &mockFile{}, nil
+			return mf, nil
 		},
 	}
 }
@@ -102,8 +113,9 @@ func newMockConn() *mockConn {
 	}
 
 	return &mockConn{
-		toalRes: len(mcon),
-		results: mcon,
+		reqCount: 0,
+		toalRes:  len(mcon),
+		results:  mcon,
 	}
 }
 
