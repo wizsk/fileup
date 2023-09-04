@@ -1,3 +1,16 @@
+// fileup is a websocket bsed file uplad module
+//
+// follows this pattarn
+//
+// 1. send file info
+//
+// 2. send the file
+//
+// 3. send the sha256sum
+//
+// 4. receive sha256 match status
+//
+// above 4 spets can be in a loop
 package fileup
 
 import (
@@ -59,17 +72,13 @@ func (u *Upper) createFile() (*os.File, error) {
 	}
 
 	u.fileInfo.path = filepath.Join(u.root, u.fileInfo.Name)
-	return createCniqueFile(u.fileInfo.path)
-}
-
-func createCniqueFile(path string) (*os.File, error) {
-	_, err := os.Stat(path)
+	_, err = os.Stat(u.fileInfo.path)
 	// err nill file existss
 	if err == nil {
-		path += fmt.Sprintf("-%d", time.Now().UnixNano())
+		u.fileInfo.path += fmt.Sprintf("-%d", time.Now().UnixNano())
 	}
 
-	return os.Create(path)
+	return os.Create(u.fileInfo.path)
 }
 
 func (u *Upper) saveToFile() error {

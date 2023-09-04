@@ -16,8 +16,14 @@ func main() {
 	rootDir := "tmp"
 	// igroing the err
 	_ = os.Mkdir(rootDir, os.ModePerm)
-	s := fileup.NewServer(rootDir, "")
-	http.Handle("/ws", websocket.Handler(s.HandleConn))
+	s := fileup.NewServer(rootDir)
+	http.Handle("/ws", websocket.Handler(func(c *websocket.Conn) {
+		req := c.Request()
+		log.Printf("request from %q", req.URL.Path)
+		// you can do suff here like
+		// now handle conn
+		s.HandleConn(c)
+	}))
 	// starting server
 
 	log.Println("serving at http://localhost:8002")

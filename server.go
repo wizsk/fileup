@@ -10,16 +10,12 @@ import (
 
 type Server struct {
 	RootDir string
-	Origin  string // used for testing mostly
-	err     error  // for testing
+	err     error // for testing
 }
 
 // root is the directory where the file will be saved.
 // Func will exit with `log.Fatal` if the root direcoty name is not provided properly
-//
-// origin is the local addr.
-// example : `localhost:8001`
-func NewServer(root string, origin string) *Server {
+func NewServer(root string) *Server {
 	stat, err := os.Stat(root)
 	if err != nil {
 		log.Fatalf("NewServer: while opening %q: %s\n", root, err)
@@ -30,7 +26,6 @@ func NewServer(root string, origin string) *Server {
 
 	return &Server{
 		RootDir: root,
-		Origin:  origin,
 	}
 }
 
@@ -45,10 +40,14 @@ func (s *Server) HandleConn(conn *websocket.Conn) {
 	}
 }
 
-func (s *Server) Serve() {
-	http.Handle("/", websocket.Handler(s.HandleConn))
+// Serve serves the websocket
+// route is the path where the http server will use
+// origin is the local addr.  example : `localhost:8001`
+func (s *Server) Serve(route, origin string) {
+	http.Handle(route, websocket.Handler(s.HandleConn))
 
-	if err := http.ListenAndServe(s.Origin, nil); err != nil {
+	log.Printf("litening at %q\n", origin)
+	if err := http.ListenAndServe(origin, nil); err != nil {
 		log.Fatal(err)
 	}
 }

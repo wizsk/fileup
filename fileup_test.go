@@ -17,8 +17,8 @@ const readFileDir = "_tmp"
 
 func TestHandeler(t *testing.T) {
 	checkForTestFiels(t)
-	s := NewServer(saveFileDir, origin)
-	go s.Serve() // starting real server :)
+	s := NewServer(saveFileDir)
+	go s.Serve("/", origin) // starting real server :)
 
 	w := "ws://" + origin
 	conn, err := websocket.Dial(w, "", origin)
