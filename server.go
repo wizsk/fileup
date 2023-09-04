@@ -34,7 +34,7 @@ func NewServer(root string, origin string) *Server {
 	}
 }
 
-func (s *Server) handleConn(conn *websocket.Conn) {
+func (s *Server) HandleConn(conn *websocket.Conn) {
 	u := NewUpper(s.RootDir)
 	u.conn = conn
 	defer conn.Close()
@@ -46,7 +46,7 @@ func (s *Server) handleConn(conn *websocket.Conn) {
 }
 
 func (s *Server) Serve() {
-	http.Handle("/", websocket.Handler(s.handleConn))
+	http.Handle("/", websocket.Handler(s.HandleConn))
 
 	if err := http.ListenAndServe(s.Origin, nil); err != nil {
 		log.Fatal(err)

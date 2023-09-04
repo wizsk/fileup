@@ -10,8 +10,15 @@ type Sha256 struct {
 	Sum string `json:"sum"`
 }
 
+
+const (
+	msgTypeSha256 string = "sha256"
+	// msgType string = ""
+
+)
+
 type StatusMsg struct {
-	Type  string `json:"type"`
+	Type  string `json:"type"` // 
 	Body  string `json:"body"`
 	Error bool   `json:"error"`
 }

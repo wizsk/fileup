@@ -54,7 +54,6 @@ func (u *Upper) createFile() (*os.File, error) {
 		return nil, err
 	}
 
-	_, err = u.conn.Write([]byte(`{"status": "file creatiion successfull success"}`))
 	if err != nil {
 		return nil, err
 	}
@@ -85,11 +84,16 @@ func (u *Upper) saveToFile() error {
 		if err != nil {
 			return err
 		}
-		file.Close()
+
 		err = u.checkFile()
 		if err != nil {
 			// ignoring the err for now
 			_ = writeJson(u.conn, StatusMsg{Error: true, Type: "error", Body: err.Error()})
+			return err
+		}
+
+		err = writeJson(u.conn, StatusMsg{Type: msgTypeSha256, Body: "sha256sum matched"})
+		if err != nil {
 			return err
 		}
 	}
@@ -112,18 +116,19 @@ func (u *Upper) checkFile() error {
 	}
 	defer file.Close()
 
-	sum, err := calculateSHA256Checksum(file)
-	if err != nil {
+	h := sha256.New()
+	if _, err := io.Copy(h, file); err != nil {
 		return err
 	}
+
+	sum := fmt.Sprintf("%x", h.Sum(nil))
 
 	var acualSum Sha256
 	if err = json.Unmarshal(u.buff[:read], &acualSum); err != nil {
 		return err
 	}
 
-	matched := acualSum.Sum != sum
-	if matched {
+	if acualSum.Sum != sum {
 		return ErrCheckSumDontMatch
 	}
 
