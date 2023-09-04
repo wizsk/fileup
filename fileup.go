@@ -8,64 +8,49 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"golang.org/x/net/websocket"
 )
 
-const origin = "localhost:8001"
-
 const CHUNK_SIZE int64 = 1024 * 1024 * 2 // 2MB
-
-var SaveFileDir = "tmp"
 
 var ErrCheckSumDontMatch = errors.New("checum don't match")
 
 type Upper struct {
 	conn     *websocket.Conn
+	root     string
 	fileInfo FileInfo
-	err      error
+	buff     []byte
 }
 
-func (u *Upper) handleConn(ws *websocket.Conn) {
-	u.conn = ws
-	defer ws.Close()
-
-	err := u.saveToFile()
-	u.err = err
-	if err != nil {
-		log.Println(err)
+func NewUpper(rootDir string) *Upper {
+	if rootDir == "" {
+		log.Fatal("rootdir cant't be emty")
 	}
-}
-
-func (u *Upper) Serve() {
-	http.Handle("/", websocket.Handler(u.handleConn))
-
-	if err := http.ListenAndServe(origin, nil); err != nil {
-		log.Fatal(err)
+	return &Upper{
+		buff: make([]byte, CHUNK_SIZE),
+		root: rootDir,
 	}
+
 }
 
 func (u *Upper) createFile() (*os.File, error) {
-	buf := make([]byte, CHUNK_SIZE)
 	var read int
 	var err error
 
-	fmt.Println("?", read, buf)
 	for read <= 0 {
-		read, err = u.conn.Read(buf)
-		fmt.Println("?", read, buf)
+		read, err = u.conn.Read(u.buff)
 		if err != nil && !errors.Is(err, io.EOF) {
 			return nil, err
 		}
 	}
 
-	fmt.Println("?", read, buf)
 	// read file info
 	u.fileInfo = FileInfo{}
-	if err := json.Unmarshal(buf[:read], &u.fileInfo); err != nil {
+	if err := json.Unmarshal(u.buff[:read], &u.fileInfo); err != nil {
 		return nil, err
 	}
 
@@ -74,17 +59,48 @@ func (u *Upper) createFile() (*os.File, error) {
 		return nil, err
 	}
 
-	u.fileInfo.path = filepath.Join(SaveFileDir, u.fileInfo.Name)
-	return os.Create(u.fileInfo.path)
+	u.fileInfo.path = filepath.Join(u.root, u.fileInfo.Name)
+	return createCniqueFile(u.fileInfo.path)
+}
+
+func createCniqueFile(path string) (*os.File, error) {
+	_, err := os.Stat(path)
+	// err nill file existss
+	if err == nil {
+		path += fmt.Sprintf("-%d", time.Now().UnixNano())
+	}
+
+	return os.Create(path)
+}
+
+func (u *Upper) saveToFile() error {
+	for {
+		file, err := u.createFile()
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		err = save(u.conn, file, u.fileInfo.Size)
+		if err != nil {
+			return err
+		}
+		file.Close()
+		err = u.checkFile()
+		if err != nil {
+			// ignoring the err for now
+			_ = writeJson(u.conn, StatusMsg{Error: true, Type: "error", Body: err.Error()})
+			return err
+		}
+	}
 }
 
 func (u *Upper) checkFile() error {
-	buf := make([]byte, CHUNK_SIZE)
 	var read int
 	var err error
 
 	for read <= 0 {
-		read, err = u.conn.Read(buf)
+		read, err = u.conn.Read(u.buff)
 		if err != nil {
 			return err
 		}
@@ -101,38 +117,17 @@ func (u *Upper) checkFile() error {
 		return err
 	}
 
-	if string(buf[:read]) != sum {
+	var acualSum Sha256
+	if err = json.Unmarshal(u.buff[:read], &acualSum); err != nil {
+		return err
+	}
+
+	matched := acualSum.Sum != sum
+	if matched {
 		return ErrCheckSumDontMatch
 	}
 
 	return nil
-}
-
-func (u *Upper) saveToFile() error {
-	fmt.Println("0")
-	for {
-
-		fmt.Println("0+11")
-		file, err := u.createFile()
-		if err != nil {
-			fmt.Println("e1")
-			return err
-		}
-	panic("f")
-		fmt.Println("1")
-
-		err = save(u.conn, file, u.fileInfo.Size)
-		if err != nil {
-			return err
-		}
-		fmt.Println("2")
-		file.Close()
-		err = u.checkFile()
-		if err != nil {
-			return err
-		}
-		fmt.Println("3")
-	}
 }
 
 // save reads from the conn,  writes it to the w
@@ -157,9 +152,10 @@ func save(conn io.Reader, w io.Writer, size int64) error {
 			return nil
 		}
 
-		// hacky math
+		// read only the file part
 		if totalRead+CHUNK_SIZE >= size {
-			buf = buf[:size-totalRead+CHUNK_SIZE]
+			// read only until the file not more than that
+			buf = buf[:size-totalRead]
 		}
 	}
 
@@ -172,4 +168,13 @@ func calculateSHA256Checksum(data io.Reader) (string, error) {
 	}
 	checksum := hash.Sum(nil)
 	return hex.EncodeToString(checksum), nil
+}
+
+func writeJson(w io.Writer, i interface{}) error {
+	data, err := json.Marshal(i)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(data)
+	return err
 }
