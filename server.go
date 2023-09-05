@@ -33,6 +33,10 @@ func NewServer(root string) *Server {
 	}
 }
 
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	websocket.Handler(s.HandleConn).ServeHTTP(w, r)
+}
+
 func (s *Server) HandleConn(conn *websocket.Conn) {
 	u := NewUpper(s.RootDir)
 	u.conn = conn
