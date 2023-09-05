@@ -19,7 +19,7 @@ func main() {
 	s := fileup.NewServer(rootDir)
 	http.Handle("/ws", websocket.Handler(func(c *websocket.Conn) {
 		req := c.Request()
-		log.Printf("request from %q", req.URL.Path)
+		log.Printf("request from %q", req.RemoteAddr)
 		// you can do suff here like
 		// now handle conn
 		s.HandleConn(c)

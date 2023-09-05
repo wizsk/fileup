@@ -3,6 +3,7 @@ const fileInput = document.getElementById('fileInput');
 const progres = document.getElementById("pro");
 const progres_bar = document.getElementById("file-count");
 const submit_btn = document.getElementById("sendButton");
+const conn_status = document.getElementById("conn-status");
 
 
 
@@ -26,11 +27,27 @@ type StatusMsg struct {
 }
 */
 
+
+let connAlive = true;
+let connIntervalId;
+
 let waitForNext = false;
 let encounteredErr = false;
-
 ws.onmessage = async (ev) => {
-    console.log("got a msg", ev.data)
+    if (ev.data === "ping") {
+        if (!connAlive) return;
+        connAlive = true;
+        conn_status.innerText = "connected";
+        clearInterval(connIntervalId);
+        connIntervalId = setInterval(() => {
+            conn_status.style.color = "red";
+            conn_status.innerText = "disconnected";
+            connAlive = false;
+        }, 5000)
+        return
+    }
+
+    console.log("Got a msg:", ev.data)
     const msg = await JSON.parse(ev.data);
 
     if (msg.error) {
@@ -47,36 +64,47 @@ ws.onmessage = async (ev) => {
     }
 }
 
+
 submit_btn.addEventListener("click", async () => {
+    if (fileInput.files.length === 0) {
+        progres.innerText = "Please select some files";
+        return
+    }
+
     for (let i = 0; i < fileInput.files.length; i++) {
+        if (!checkConn()) return;
         const file = fileInput.files[i];
-        progres_bar.innerText = `uploading ${i + 1}/${fileInput.files.length} files`;
+        progres_bar.innerText = `uploading "${file.name}": ${i + 1}/${fileInput.files.length} files`;
 
         const reader = new FileReader();
 
         await new Promise((resolve) => {
             reader.onload = async (event) => {
+                if (!checkConn()) return;
                 const chunkCount = event.target.result.byteLength / CHUNK_SIZE;
 
                 // sending file name
-                ws.send(JSON.stringify({ name: file.name, size: file.size }))
-                console.log("file", i, JSON.stringify({ name: file.name, size: file.size }))
+                ws.send(JSON.stringify({ name: file.name, size: file.size }));
+                console.log("uploading file", i + 1, JSON.stringify({ name: file.name, size: file.size }));
 
+                // sending data
                 for (let chunkId = 0; chunkId <= chunkCount; chunkId++) {
+                    if (!checkConn()) return;
                     const data = event.target.result.slice(chunkId * CHUNK_SIZE, chunkId * CHUNK_SIZE + CHUNK_SIZE);
                     ws.send(data);
-
-                    progres.innerText = `${Math.round(chunkId * 100 / chunkCount)}`
+                    progres.innerText = `${Math.round(chunkId * 100 / chunkCount)}`;
+                    await sleep(10) // give server some time
                 }
 
+                if (!checkConn()) return;
                 progres.innerText = "checking file validity"
                 ws.send(JSON.stringify({ sum: await calculateSHA256Checksum(file) }));
 
-                // wait for the message
+                // wait for the sha256 confimation message
                 waitForNext = true;
                 let waitCount = 0; // 10 count = 1 second :: 100*10 = 1000ms = 1s
                 while (waitForNext) {
-                    console.log("waiting")
+                    if (!checkConn()) return;
                     await sleep(100)
                     // wait for 10 seconds
                     if (waitCount > 100) {
@@ -84,7 +112,6 @@ submit_btn.addEventListener("click", async () => {
                     }
                     waitCount++
                 }
-
                 resolve(); // Resolve the promise to move on to the next file.
             };
 
@@ -92,6 +119,7 @@ submit_btn.addEventListener("click", async () => {
                 resolve(); // Resolve the promise to move on to the next file.
             }
 
+            if (!checkConn()) return;
             reader.readAsArrayBuffer(file);
         });
 
@@ -116,4 +144,11 @@ async function calculateSHA256Checksum(file) {
 // milisecond
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function checkConn() {
+    if (!connAlive) {
+        console.log("connection disconnected!")
+    }
+    return connAlive
 }

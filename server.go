@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"golang.org/x/net/websocket"
 )
@@ -33,6 +34,18 @@ func (s *Server) HandleConn(conn *websocket.Conn) {
 	u := NewUpper(s.RootDir)
 	u.conn = conn
 	defer conn.Close()
+
+	go func() {
+		for {
+			_, err := conn.Write([]byte("ping"))
+			if err != nil {
+				conn.Close()
+				log.Printf("conn form %q has been cloesd\n", conn.Request().RemoteAddr)
+				return
+			}
+			time.Sleep(3 * time.Second)
+		}
+	}()
 
 	s.err = u.saveToFile()
 	if s.err != nil {

@@ -26,7 +26,7 @@ func main() {
 	s := fileup.NewServer("tmp")
 	// go s.Serve("/", origin) // you can use this
 	// or
-	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// you can do your suff here and
 		websocket.Handler(s.HandleConn).ServeHTTP(w, r)
 	})
@@ -98,9 +98,19 @@ func sendSha256(conn *websocket.Conn, r io.Reader) {
 
 func readShaStatus(conn *websocket.Conn) {
 	buf := make([]byte, fileup.CHUNK_SIZE)
+	var read int
+	var err error
 
 	// read is blocking
-	read, err := conn.Read(buf)
+	for {
+		read, err = conn.Read(buf)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if string(buf[:read]) != "ping" {
+			break
+		}
+	}
 
 	stat := fileup.StatusMsg{}
 	// err := websocket.Message.Receive(conn, &stat)
