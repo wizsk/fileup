@@ -2,4 +2,4 @@ module github.com/wizsk/fileup
 
 go 1.20
 
-require github.com/gorilla/websocket v1.5.0
+require golang.org/x/net v0.14.0
