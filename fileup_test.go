@@ -11,17 +11,17 @@ import (
 	"golang.org/x/net/websocket"
 )
 
-const origin = "localhost:8001"
 const saveFileDir = "tmp"
 const readFileDir = "_tmp"
 
 func TestHandeler(t *testing.T) {
 	checkForTestFiels(t)
 	s := NewServer(saveFileDir)
-	go s.Serve("/", origin) // starting real server :)
+	go s.Serve("/") // starting real server :)
+	time.Sleep(50 * time.Millisecond)
 
-	w := "ws://" + origin
-	conn, err := websocket.Dial(w, "", origin)
+	w := "ws://" + s.origin
+	conn, err := websocket.Dial(w, "", s.origin)
 	Nil(t, err)
 	defer conn.Close()
 
@@ -53,7 +53,7 @@ func TestHandeler(t *testing.T) {
 	}
 
 	// wait for the conn and so on
-	time.Sleep(5 * time.Second)
+	time.Sleep(1 * time.Second)
 	// reading the err form server
 	Nil(t, s.err)
 }

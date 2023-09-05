@@ -2,8 +2,10 @@ package fileup
 
 import (
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"golang.org/x/net/websocket"
@@ -11,7 +13,8 @@ import (
 
 type Server struct {
 	RootDir string
-	err     error // for testing
+	err     error  // for testing
+	origin  string // for testing
 }
 
 // root is the directory where the file will be saved.
@@ -35,32 +38,45 @@ func (s *Server) HandleConn(conn *websocket.Conn) {
 	u.conn = conn
 	defer conn.Close()
 
+	done := make(chan struct{})
 	go func() {
 		for {
 			_, err := conn.Write([]byte("ping"))
 			if err != nil {
 				conn.Close()
 				log.Printf("conn form %q has been cloesd\n", conn.Request().RemoteAddr)
-				return
+				break
 			}
 			time.Sleep(3 * time.Second)
 		}
+		done <- struct{}{}
 	}()
 
 	s.err = u.saveToFile()
 	if s.err != nil {
 		log.Println(s.err)
 	}
+	<-done
 }
 
-// Serve serves the websocket
-// route is the path where the http server will use
-// origin is the local addr.  example : `localhost:8001`
-func (s *Server) Serve(route, origin string) {
+// origin will be selected randomly
+func (s *Server) Serve(route string) {
+	s.origin = randAddr()
 	http.Handle(route, websocket.Handler(s.HandleConn))
 
-	log.Printf("litening at %q\n", origin)
-	if err := http.ListenAndServe(origin, nil); err != nil {
+	log.Printf("litening at %q\n", s.origin)
+	if err := http.ListenAndServe(s.origin, nil); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func randAddr() string {
+	// Define a range for the random port (e.g., 1024 to 65535)
+	minPort := 1024
+	maxPort := 65535
+
+	// Generate a random port within the specified range
+	randomPort := rand.Intn(maxPort-minPort+1) + minPort
+
+	return "localhost:" + strconv.Itoa(randomPort)
 }
