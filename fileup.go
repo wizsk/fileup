@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,31 +16,35 @@ type Saver struct {
 	UpDir           string
 	UpRoute         string
 	IncomePleateExt string // default is ".part"
+	Err             ErrHandler
 }
 
-const (
-	uploadRoute    = "/api/upload/"
-	uploadDir      = "uploads"
-	incompleateExt = ".part"
+type ErrHandler func(w http.ResponseWriter, r *http.Request, httpMsg string, httpCode int, err error)
 
-	PermFile = 0664
-	PermDir  = 0755
+const (
+	permFile = 0664
+	permDir  = 0755
 )
 
-func NewSaver(upRoute, upDir string) *Saver {
+// upRoute is the "example/route/path"
+func NewSaver(upRoute, upDir string, errHandeler ErrHandler) *Saver {
+	if errHandeler == nil {
+		errHandeler = func(w http.ResponseWriter, r *http.Request, httpMsg string, httpCode int, err error) {
+			if httpMsg == "" {
+				httpMsg = "sorry someting went wrong"
+			}
+
+			http.Error(w, httpMsg, httpCode)
+			log.Printf("[Error] Request from %q: err: %v\n", r.RemoteAddr, err)
+		}
+	}
+
 	return &Saver{
 		UpRoute:         upRoute,
 		UpDir:           upDir,
 		IncomePleateExt: ".part",
+		Err:             errHandeler,
 	}
-}
-
-func main() {
-	http.Handle("/", http.FileServer(http.Dir("ui")))
-	s := NewSaver(uploadRoute, uploadDir)
-
-	http.HandleFunc(uploadRoute, s.Handeler)
-	http.ListenAndServe(":8080", nil)
 }
 
 func (s *Saver) Handeler(w http.ResponseWriter, r *http.Request) {
@@ -60,19 +65,21 @@ func (s *Saver) Handeler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Saver) patchHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("Content-Type") != "application/offset+octet-stream" {
-		logErr(w, r, fmt.Errorf(`wanted "application/offset+octet-stream" got %q`, r.Header.Get("Content-Type")))
+		s.Err(w, r,
+			"bad request", http.StatusBadRequest,
+			fmt.Errorf(`wanted "application/offset+octet-stream" got %q`, r.Header.Get("Content-Type")))
 		return
 	}
 
 	uploadOffset, err := uploadOffset(r)
 	if err != nil {
-		logErr(w, r, err)
+		s.Err(w, r, "", http.StatusBadRequest, err)
 		return
 	}
 
-	file, err := s.openFile(uploadRoute, r)
+	file, err := s.openFile(r)
 	if err != nil {
-		logErr(w, r, err)
+		s.Err(w, r, "", http.StatusBadRequest, err)
 		return
 	}
 	defer file.Close()
@@ -80,7 +87,7 @@ func (s *Saver) patchHandler(w http.ResponseWriter, r *http.Request) {
 	fileStat, err := file.Stat()
 	if err != nil {
 		if fileStat.Size() != uploadOffset {
-			logErr(w, r, fmt.Errorf("file offset dont match"))
+			s.Err(w, r, "", http.StatusBadRequest, err)
 			return
 		}
 	}
@@ -88,13 +95,13 @@ func (s *Saver) patchHandler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	bytesWritten, err := io.Copy(file, r.Body)
 	if err != nil {
-		logErr(w, r, err)
+		s.Err(w, r, "", http.StatusBadRequest, err)
 		return
 	}
 
 	err = s.renameFile(file, r)
 	if err != nil {
-		logErr(w, r, err)
+		s.Err(w, r, "", http.StatusBadRequest, err)
 		return
 	}
 
@@ -119,11 +126,11 @@ func (s *Saver) renameFile(file *os.File, r *http.Request) error {
 		return nil
 	}
 
-	fileName := strings.TrimPrefix(r.URL.Path, uploadRoute)
-	fileName = filepath.Join(uploadDir, fileName)
+	fileName := strings.TrimPrefix(r.URL.Path, s.UpRoute)
+	fileName = filepath.Join(s.UpDir, fileName)
 
 	if _, err := os.Stat(fileName); err == nil {
-		fileName = strings.TrimRight(file.Name(), incompleateExt)
+		fileName = strings.TrimRight(file.Name(), s.IncomePleateExt)
 	}
 
 	return os.Rename(file.Name(), fileName)
@@ -133,13 +140,13 @@ func (s *Saver) renameFile(file *os.File, r *http.Request) error {
 func (s *Saver) postHandler(w http.ResponseWriter, r *http.Request) {
 	fileName, err := s.getFilePath(r)
 	if err != nil {
-		logErr(w, r, err)
+		s.Err(w, r, "", http.StatusBadRequest, err)
 		return
 	}
 
 	_, err = os.Create(fileName)
 	if err != nil {
-		logErr(w, r, err)
+		s.Err(w, r, "", http.StatusBadRequest, err)
 		return
 	}
 
@@ -148,13 +155,13 @@ func (s *Saver) postHandler(w http.ResponseWriter, r *http.Request) {
 
 // chekFile cheks the file exists or not
 // and retuns a FileInfo || an err
-func (s *Saver) openFile(baseUrl string, r *http.Request) (*os.File, error) {
+func (s *Saver) openFile(r *http.Request) (*os.File, error) {
 	filePath, err := s.getFilePath(r)
 	if err != nil {
 		return nil, err
 	}
 
-	return os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY, PermFile)
+	return os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY, permFile)
 }
 
 func (s *Saver) getFilePath(r *http.Request) (string, error) {
