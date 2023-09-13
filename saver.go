@@ -1,8 +1,9 @@
 package fileup
 
 import (
-	"log"
+	"fmt"
 	"net/http"
+	"os"
 )
 
 type ErrHandler func(w http.ResponseWriter, r *http.Request, httpMsg string, httpCode int, err error)
@@ -13,19 +14,31 @@ var defaultErrHandeer ErrHandler = func(w http.ResponseWriter, r *http.Request, 
 	}
 
 	http.Error(w, httpMsg, httpCode)
-	log.Printf("[Error] Request from %q: err: %v\n", r.RemoteAddr, err)
+	fmt.Printf("[Error] Request from %q: err: %v\n", r.RemoteAddr, err)
 }
 
 // upRoute is the "example/route/path"
-func NewSaver(upRoute, upDir string, errHandeler ErrHandler) *Saver {
-	if errHandeler == nil {
-		errHandeler = defaultErrHandeer
+func NewSaver(upRoute, upDir string) *Saver {
+	return &Saver{
+		UpRoute:         upRoute,
+		UpDir:           upDir,
+		IncomePleateExt: defaultExt,
+		Err:             defaultErrHandeer,
+	}
+}
+
+// NewSaverMkdir creates the dir and Retuns a Server
+func NewSaverMkdir(upRoute, upDir string) (*Saver, error) {
+	 err := os.Mkdir(upDir, os.ModePerm)
+	if !os.IsExist(err) {
+		return nil, err
 	}
 
 	return &Saver{
 		UpRoute:         upRoute,
 		UpDir:           upDir,
 		IncomePleateExt: defaultExt,
-		Err:             errHandeler,
-	}
+		Err:             defaultErrHandeer,
+	}, nil
+
 }
