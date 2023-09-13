@@ -1,6 +1,7 @@
 package fileup
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -18,7 +19,7 @@ func (s *Saver) checkUploadOffSet(w http.ResponseWriter, r *http.Request, f *os.
 		s.Err(w, r, "", http.StatusInternalServerError, err)
 		return false
 	} else if fileStat.Size() != uploadOffset {
-		s.Err(w, r, "file offset size dosen't match", http.StatusBadRequest, err)
+		s.Err(w, r, "file offset size dosen't match", http.StatusBadRequest, errors.New("file off-set err"))
 		return false
 	}
 
