@@ -5,6 +5,7 @@ const UPLOAD_URL = "/api/upload"
 const fileInput = document.getElementById("fileInput");
 const fileSubmit = document.getElementById("fileSubmit");
 const fileProgress = document.getElementById("progress");
+const fileProgressSend = document.getElementById("progress-send");
 
 let isUploading = false;
 
@@ -25,17 +26,16 @@ fileSubmit.addEventListener("click", async () => {
 
 async function uploadFile() {
     isUploading = true;
-    let i = 0;
+    fileProgressSend.innerText = `send 0/${fileInput.files.length}`
     for (let i = 0; i < fileInput.files.length; i++) {
         let file = fileInput.files[i];
         let fileURL = `${UPLOAD_URL}/${file.name}`
         const uuid = generateUUID();
         await upload(file, fileURL, uuid);
+        fileProgressSend.innerText = `send ${i + 1}/${fileInput.files.length}`;
         console.log("done", file.name);
     }
     isUploading = false;
-    const msg = `send ${fileInput.files.length}/${fileInput.files.length}`;
-    fileProgress.innerText = msg;
 }
 
 async function upload(file, fileURL, uuid) {
