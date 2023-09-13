@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"net/http"
-	"os"
 
 	"github.com/wizsk/fileup"
 )
@@ -12,9 +11,16 @@ func main() {
 	port := ":8001"
 	updir := "uploads"
 	upRoute := "/api/upload/"
-	os.Mkdir("uploads", os.ModePerm)
 
-	s := fileup.NewSaver(upRoute, updir, nil)
+	// you can do this
+	// os.Mkdir("uploads", os.ModePerm)
+	// s := fileup.NewSaver(upRoute, updir)
+
+	// or this
+	s, err := fileup.NewSaverMkdir(upRoute, updir)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	http.Handle("/", http.FileServer(http.Dir("ui")))
 	http.HandleFunc(upRoute, s.Handeler)

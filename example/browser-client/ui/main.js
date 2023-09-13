@@ -25,42 +25,20 @@ fileSubmit.addEventListener("click", async () => {
 
 async function uploadFile() {
     isUploading = true;
-    let file = fileInput.files[0];
-    let fileURL = `${UPLOAD_URL}/${file.name}`
-    const uuid = generateUUID();
-
-    try {
-        await fetch(fileURL, {
-            method: 'POST',
-            headers: {
-                "Upload-Offset": "",
-                "Upload-Size": file.size,
-                "Upload-UUID": uuid,
-            },
-
-        })
-    } catch (err) {
-        console.error("while uploading file", file.name, err)
-        fileProgress.innerText = err;
-        return
-    }
-
-    const chuckCount = Math.round(file.size / CHUNK_SiZE);
-    for (let chuckId = 0; chuckId <= chuckCount; chuckId++) {
-        const offset = chuckId * CHUNK_SiZE;
-        const readUntil = (chuckId * CHUNK_SiZE) + CHUNK_SiZE;
-        const data = file.slice(offset, readUntil);
+    for (let i = 0; i < fileInput.files.length; i++) {
+        let file = fileInput.files[i];
+        let fileURL = `${UPLOAD_URL}/${file.name}`
+        const uuid = generateUUID();
 
         try {
             await fetch(fileURL, {
-                method: 'PATCH',
+                method: 'POST',
                 headers: {
-                    "Upload-Offset": offset,
+                    "Upload-Offset": "",
                     "Upload-Size": file.size,
                     "Upload-UUID": uuid,
-                    "Content-Type": "application/offset+octet-stream",
                 },
-                body: data,
+
             })
         } catch (err) {
             console.error("while uploading file", file.name, err)
@@ -68,12 +46,38 @@ async function uploadFile() {
             return
         }
 
-        const msg = `${chuckId}:send data ${offset}-${readUntil} ${Math.round((chuckId / chuckCount) * 100)}%`;
-        fileProgress.innerText = msg;
-        console.log(msg);
+        const chuckCount = Math.round(file.size / CHUNK_SiZE);
+        for (let chuckId = 0; chuckId <= chuckCount; chuckId++) {
+            const offset = chuckId * CHUNK_SiZE;
+            const readUntil = (chuckId * CHUNK_SiZE) + CHUNK_SiZE;
+            const data = file.slice(offset, readUntil);
+
+            try {
+                await fetch(fileURL, {
+                    method: 'PATCH',
+                    headers: {
+                        "Upload-Offset": offset,
+                        "Upload-Size": file.size,
+                        "Upload-UUID": uuid,
+                        "Content-Type": "application/offset+octet-stream",
+                    },
+                    body: data,
+                })
+            } catch (err) {
+                console.error("while uploading file", file.name, err)
+                fileProgress.innerText = err;
+                return
+            }
+
+            const msg = `send ${i + 1}/${fileInput.files.length} <br>curret: ${Math.round((chuckId / chuckCount) * 100)}% ${file.name}`;
+            fileProgress.innerHTML = msg;
+            console.log(msg);
+        }
+        console.log("done");
     }
-    console.log("done");
     isUploading = false;
+    const msg = `send ${fileInput.files.length}/${fileInput.files.length}`;
+    fileProgress.innerText = msg;
 }
 
 async function readAndSendFile(file) { }
